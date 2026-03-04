@@ -1,0 +1,19 @@
+services:
+  
+  gateway:
+    container_name: ngf-nginx
+    hostname: ngf-nginx
+    build: ./build
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - geoip:/etc/nginx/geoip:ro # mount your maxmind geoip db here
+    tmpfs:
+      - /var/run/nginx:uid=101,gid=101,mode=0755
+      - /var/log/nginx-agent:uid=1000,gid=1000,mode=0755
+volumes:
+  geoip:

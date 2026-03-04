@@ -3,9 +3,9 @@ ARG NGINX_VERSION=1.29.5
 ARG ALPINE_VERSION=3.23
 ARG GEOIP2_VERSION=3.4
 
-
 # Stage 1 - build NGINX and additional modules
 FROM alpine:${ALPINE_VERSION} AS build
+LABEL maintainer="mail@alexanderwolz.de"
 
 ARG NGINX_VERSION
 ARG GEOIP2_VERSION
@@ -34,11 +34,12 @@ RUN ./configure \
     && make modules
 
 
+
+
 # Stage 2 - run NGINX Alpine container
 FROM ghcr.io/nginx/nginx-gateway-fabric/nginx:${NGF_VERSION}
 LABEL maintainer="mail@alexanderwolz.de"
 ARG NGF_VERSION
-
 USER root
 
 RUN chmod 644 /etc/nginx-agent/nginx-agent.conf
@@ -47,10 +48,23 @@ RUN apk add --no-cache libmaxminddb
 
 COPY --from=build /build/nginx/objs/ngx_http_geoip2_module.so /usr/lib/nginx/modules/
 
-RUN mkdir -p /etc/nginx/main-includes \
-    && echo "load_module modules/ngx_http_geoip2_module.so;" > /etc/nginx/main-includes/50-mod-http-geoip2.conf
+# Patch nginx.conf: add load_module and http-includes
+RUN sed -i 's|load_module modules/ngx_http_js_module.so;|load_module modules/ngx_http_js_module.so;\nload_module modules/ngx_http_geoip2_module.so;|' /etc/nginx/nginx.conf \
+    && sed -i 's|include /etc/nginx/conf.d/\*.conf;|include /etc/nginx/conf.d/*.conf;\n  include /etc/nginx-custom/http-includes/*.conf;|' /etc/nginx/nginx.conf
 
-RUN mkdir -p /etc/nginx/geoip \
-    && chown -R nginx:nginx /etc/nginx/geoip
+# GeoIP2 http context directives
+RUN mkdir -p /etc/nginx-custom/http-includes \
+    && chown nginx:nginx /etc/nginx-custom/http-includes
+COPY --chown=nginx:nginx http-includes/geoip2.conf /etc/nginx-custom/http-includes/geoip2.conf
+
+# GeoIP2 database directory with sample placeholder files
+RUN mkdir -p /etc/nginx-custom/geoip && chown -R nginx:nginx /etc/nginx-custom/geoip
+COPY --chown=nginx:nginx geoip/sample.mmdb /etc/nginx-custom/geoip/GeoLite2-Country.mmdb
+COPY --chown=nginx:nginx geoip/sample.mmdb /etc/nginx-custom/geoip/GeoLite2-City.mmdb
+
+# Defaults
+RUN mkdir -p /etc/nginx-custom/geoip-defaults && chown -R nginx:nginx /etc/nginx-custom/geoip-defaults
+COPY --chown=nginx:nginx geoip/sample.mmdb /etc/nginx-custom/geoip-defaults/GeoLite2-Country.mmdb
+COPY --chown=nginx:nginx geoip/sample.mmdb /etc/nginx-custom/geoip-defaults/GeoLite2-City.mmdb
 
 USER nginx
